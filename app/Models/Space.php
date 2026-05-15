@@ -9,17 +9,25 @@ class Space extends Model
 {
     use HasFactory;
 
-    protected $fillable = [
-        'name', 'slug', 'type', 'capacity', 'description', 'price_per_hour', 'is_active'
-    ];
+    protected $fillable = ['name', 'slug', 'description', 'capacity', 'image_path', 'is_active'];
 
-    public function reservations() { 
-        return $this->hasMany(Reservation::class); 
+    public function getRouteKeyName()
+    {
+        return 'slug';
     }
-    public function availabilities() { 
-        return $this->hasMany(Availability::class); 
+
+    public function reservations()
+    {
+        return $this->hasMany(Reservation::class);
     }
-    public function blockedSlots() { 
-        return $this->hasMany(BlockedSlot::class); 
+
+    public function availabilities()
+    {
+        return $this->hasMany(Availability::class);
+    }
+
+    public function blockedSlots()
+    {
+        return $this->hasMany(BlockedSlot::class);
     }
 }

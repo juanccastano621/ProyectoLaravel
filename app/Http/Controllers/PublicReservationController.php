@@ -4,53 +4,67 @@ namespace App\Http\Controllers;
 
 use App\Models\Space;
 use App\Models\Reservation;
+use App\Models\BlockedSlot;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 use Carbon\Carbon;
 
 class PublicReservationController extends Controller
 {
-    public function create(Request $request)
-    {
-        $slug = $request->input('space');
-        $start = $request->input('start');
-
-        $space = Space::where('slug', $slug)->firstOrFail();
-        
-        $startTime = Carbon::parse($start);
-        $slotDuration = (int) env('RESERVATION_SLOT_MINUTES', 60);
-        $endTime = $startTime->copy()->addMinutes($slotDuration);
-
-        return Inertia::render('Public/Spaces/Reservations/Create', [
-            'space' => $space,
-            'startTime' => $startTime->toDateTimeString(),
-            'endTime' => $endTime->toDateTimeString(),
-            'displayDate' => $startTime->format('d/m/Y'),
-            'displayTime' => $startTime->format('H:i') . ' - ' . $endTime->format('H:i')
-        ]);
-    }
-
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $request->validate([
             'space_id' => 'required|exists:spaces,id',
-            'start_time' => 'required|date',
+            'start_time' => 'required|date|after:now',
             'end_time' => 'required|date|after:start_time',
             'user_name' => 'required|string|max:255',
-            'user_email' => 'required|email|max:255',
-            'notes' => 'nullable|string',
+            'user_email' => 'required|email',
         ]);
 
+        $space = Space::findOrFail($request->space_id);
+        $start = Carbon::parse($request->start_time);
+        $end = Carbon::parse($request->end_time);
+
+        $dayOfWeek = $start->dayOfWeek;
+        $isOpen = $space->availabilities()
+            ->where('day_of_week', $dayOfWeek)
+            ->where('start_time', '<=', $start->format('H:i:s'))
+            ->where('end_time', '>=', $end->format('H:i:s'))
+            ->exists();
+
+        if (!$isOpen) {
+            return redirect()->back()->withErrors(['error' => 'El espacio no está disponible en ese horario semanal.']);
+        }
+
+        $isBlocked = $space->blockedSlots()
+            ->where(function ($query) use ($start, $end) {
+                $query->whereBetween('start_time', [$start, $end])
+                      ->orWhereBetween('end_time', [$start, $end]);
+            })->exists();
+
+        if ($isBlocked) {
+            return redirect()->back()->withErrors(['error' => 'El horario está bloqueado por mantenimiento o evento interno.']);
+        }
+
+        $overlap = Reservation::where('space_id', $space->id)
+            ->whereIn('status', ['pendiente', 'confirmada'])
+            ->where(function ($query) use ($start, $end) {
+                $query->whereBetween('start_time', [$start, $end])
+                      ->orWhereBetween('end_time', [$start, $end]);
+            })->exists();
+
+        if ($overlap) {
+            return redirect()->back()->withErrors(['error' => 'Ya existe una reserva para este horario.']);
+        }
+
         Reservation::create([
-            'space_id' => $validated['space_id'],
-            'start_time' => $validated['start_time'],
-            'end_time' => $validated['end_time'],
-            'user_name' => $validated['user_name'],
-            'user_email' => $validated['user_email'],
-            'notes' => $validated['notes'],
+            'space_id' => $space->id,
+            'start_time' => $start,
+            'end_time' => $end,
+            'user_name' => $request->user_name,
+            'user_email' => $request->user_email,
             'status' => 'pendiente',
         ]);
 
-        return redirect()->route('spaces.index')->with('success', '¡Reserva solicitada con éxito! Está pendiente de aprobación.');
+        return redirect()->back()->with('success', 'Reserva solicitada. Espera la confirmación por correo.');
     }
 }

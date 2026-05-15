@@ -46,16 +46,18 @@ const logout = () => {
                                 </Link>
                             </div>
 
-                            <!-- Navigation Links -->
                             <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
                                 <NavLink :href="route('dashboard')" :active="route().current('dashboard')">
                                     Dashboard
                                 </NavLink>
-                                <NavLink href="/admin/spaces" :active="$page.url.startsWith('/admin/spaces')">
-                                    Espacios
+                                <NavLink :href="route('admin.calendar')" :active="route().current('admin.calendar')">
+                                    Calendario
                                 </NavLink>
                                 <NavLink :href="route('admin.reservations.index')" :active="route().current('admin.reservations.*')">
                                     Reservas
+                                </NavLink>
+                                <NavLink :href="route('admin.spaces.index')" :active="route().current('admin.spaces.*')">
+                                    Espacios
                                 </NavLink>
                             </div>
                         </div>
@@ -199,6 +201,15 @@ const logout = () => {
                     <div class="pt-2 pb-3 space-y-1">
                         <ResponsiveNavLink :href="route('dashboard')" :active="route().current('dashboard')">
                             Dashboard
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink :href="route('admin.calendar')" :active="route().current('admin.calendar')">
+                            Calendario
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink :href="route('admin.reservations.index')" :active="route().current('admin.reservations.*')">
+                            Reservas
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink :href="route('admin.spaces.index')" :active="route().current('admin.spaces.*')">
+                            Espacios
                         </ResponsiveNavLink>
                     </div>
 

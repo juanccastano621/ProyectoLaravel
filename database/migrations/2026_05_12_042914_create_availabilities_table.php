@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('availabilities', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('space_id')->constrained()->cascadeOnDelete();
-            $table->integer('day_of_week');
+            $table->foreignId('space_id')->constrained()->onDelete('cascade');
+            $table->tinyInteger('day_of_week'); 
             $table->time('start_time');
             $table->time('end_time');
             $table->timestamps();

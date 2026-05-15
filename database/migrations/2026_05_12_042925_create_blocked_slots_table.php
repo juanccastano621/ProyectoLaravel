@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('blocked_slots', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('space_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('space_id')->constrained()->onDelete('cascade');
             $table->dateTime('start_time');
             $table->dateTime('end_time');
             $table->string('reason')->nullable();

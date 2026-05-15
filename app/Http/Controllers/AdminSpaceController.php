@@ -4,72 +4,78 @@ namespace App\Http\Controllers;
 
 use App\Models\Space;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 class AdminSpaceController extends Controller
 {
     public function index()
     {
-        $spaces = Space::orderBy('created_at', 'desc')->get();
-        
         return Inertia::render('Admin/Spaces/Index', [
-            'spaces' => $spaces
+            'spaces' => Space::all()
         ]);
-    }
-
-    public function create()
-    {
-        return Inertia::render('Admin/Spaces/Create');
     }
 
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'type' => 'required|string',
-            'capacity' => 'required|integer|min:1',
-            'price_per_hour' => 'required|numeric|min:0',
-            'is_active' => 'required|boolean',
-        ], [
-            'name.required' => 'El nombre del espacio es obligatorio.',
-            'capacity.min' => 'La capacidad debe ser al menos de 1 persona.',
-            'price_per_hour.min' => 'El precio no puede ser un valor negativo.',
+            'description' => 'required',
+            'capacity' => 'required|integer',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        Space::create($validated);
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $request->file('image')->store('spaces', 'public');
+        }
 
-        return redirect()->route('admin.spaces.index')
-            ->with('success', '¡Excelente! El nuevo espacio ha sido creado correctamente.');
-    }
-
-    public function edit(Space $space)
-    {
-        return Inertia::render('Admin/Spaces/Edit', [
-            'space' => $space
+        Space::create([
+            'name' => $validated['name'],
+            'slug' => Str::slug($validated['name']),
+            'description' => $validated['description'],
+            'capacity' => $validated['capacity'],
+            'image_path' => $imagePath,
         ]);
+
+        return redirect()->back()->with('success', 'Espacio creado correctamente.');
     }
 
     public function update(Request $request, Space $space)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'type' => 'required|string',
-            'capacity' => 'required|integer|min:1',
-            'price_per_hour' => 'required|numeric|min:0',
-            'is_active' => 'required|boolean',
+            'description' => 'required',
+            'capacity' => 'required|integer',
+            'image' => 'nullable|image|mimes:jpg,jpeg,png|max:2048',
         ]);
 
-        $space->update($validated);
+        if ($request->hasFile('image')) {
+            // Borrar imagen anterior si existe
+            if ($space->image_path) {
+                Storage::disk('public')->delete($space->image_path);
+            }
+            $space->image_path = $request->file('image')->store('spaces', 'public');
+        }
 
-        return redirect()->route('admin.spaces.index')
-            ->with('success', 'Los cambios en el espacio se guardaron con éxito.');
+        $space->update([
+            'name' => $validated['name'],
+            'slug' => Str::slug($validated['name']),
+            'description' => $validated['description'],
+            'capacity' => $validated['capacity'],
+            'image_path' => $space->image_path,
+        ]);
+
+        return redirect()->back()->with('success', 'Espacio actualizado.');
     }
 
     public function destroy(Space $space)
     {
+        if ($space->image_path) {
+            Storage::disk('public')->delete($space->image_path);
+        }
         $space->delete();
-
-        return redirect()->route('admin.spaces.index')
-            ->with('success', 'El espacio ha sido eliminado permanentemente.');
+        return redirect()->back()->with('success', 'Espacio eliminado.');
     }
 }
