@@ -9,7 +9,16 @@ class Space extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'slug', 'description', 'capacity', 'image_path', 'is_active'];
+    protected $fillable = [
+        'name',
+        'slug',
+        'description',
+        'capacity',
+        'type',
+        'price_per_hour',
+        'image_path',
+        'is_active'
+    ];
 
     public function getRouteKeyName()
     {

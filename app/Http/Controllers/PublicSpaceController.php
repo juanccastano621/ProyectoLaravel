@@ -3,83 +3,149 @@
 namespace App\Http\Controllers;
 
 use App\Models\Space;
-use App\Models\Reservation;
-use App\Models\BlockedSlot;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
 
 class PublicSpaceController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $spaces = Space::where('is_active', true)->get();
+        $query = Space::where('is_active', true);
+
+        if ($request->filled('search')) {
+            $query->where('name', 'like', '%' . $request->search . '%');
+        }
+
+        if ($request->filled('capacity')) {
+            $query->where(
+                'capacity',
+                '>=',
+                $request->capacity
+            );
+        }
+
+        if ($request->filled('max_price')) {
+            $query->where(
+                'price_per_hour',
+                '<=',
+                $request->max_price
+            );
+        }
+
         return Inertia::render('Public/Spaces/Index', [
-            'spaces' => $spaces
+            'spaces' => $query->get(),
+
+            'filters' => [
+                'search' => $request->search ?? '',
+                'type' => '',
+                'capacity' => $request->capacity ?? '',
+                'max_price' => $request->max_price ?? '',
+            ]
         ]);
     }
 
     public function show(Request $request, $slug)
     {
-        $space = Space::where('slug', $slug)->where('is_active', true)->firstOrFail();
-        
-        $dateString = $request->input('date', Carbon::today()->toDateString());
-        $date = Carbon::parse($dateString);
-        $dayOfWeek = $date->dayOfWeek; 
+        $space = Space::where('slug', $slug)
+            ->with([
+                'availabilities',
+                'blockedSlots',
+                'reservations' => function ($query) {
+                    $query->whereIn('status', [
+                        'pendiente',
+                        'confirmada'
+                    ]);
+                }
+            ])
+            ->firstOrFail();
 
-        $availability = $space->availabilities()->where('day_of_week', $dayOfWeek)->first();
+        $date = $request->input(
+            'date',
+            now()->format('Y-m-d')
+        );
+
+        $dayOfWeek = date('N', strtotime($date));
+
+        $availability = $space->availabilities
+            ->where('day_of_week', $dayOfWeek)
+            ->first();
+
         $availableSlots = [];
-        
+
         if ($availability) {
-            $slotDuration = (int) env('RESERVATION_SLOT_MINUTES', 60);
-            $start = Carbon::parse($dateString . ' ' . $availability->start_time);
-            $end = Carbon::parse($dateString . ' ' . $availability->end_time);
-            
-            $reservations = Reservation::where('space_id', $space->id)
-                ->whereDate('start_time', $dateString)
-                ->whereNotIn('status', ['rechazada', 'cancelada'])
-                ->get();
-                
-            $blocked = BlockedSlot::where('space_id', $space->id)
-                ->whereDate('start_time', $dateString)
-                ->get();
-            
-            while ($start->copy()->addMinutes($slotDuration)->lte($end)) {
-                $slotStart = $start->copy();
-                $slotEnd = $start->copy()->addMinutes($slotDuration);
-                $isAvailable = true;
-                
-                if ($slotStart->isPast()) {
-                    $isAvailable = false;
-                }
-                
-                foreach ($reservations as $res) {
-                    if ($slotStart->lt(Carbon::parse($res->end_time)) && $slotEnd->gt(Carbon::parse($res->start_time))) {
-                        $isAvailable = false; break;
-                    }
-                }
-                
-                foreach ($blocked as $block) {
-                    if ($slotStart->lt(Carbon::parse($block->end_time)) && $slotEnd->gt(Carbon::parse($block->start_time))) {
-                        $isAvailable = false; break;
-                    }
-                }
-                
-                if ($isAvailable) {
+
+            $start = Carbon::parse(
+                $availability->start_time
+            );
+
+            $end = Carbon::parse(
+                $availability->end_time
+            );
+
+            while (
+                $start->copy()->addHour() <= $end
+            ) {
+
+                $slotStart = $start->format('H:i');
+                $slotEnd = $start
+                    ->copy()
+                    ->addHour()
+                    ->format('H:i');
+
+                $fullStart =
+                    $date . ' ' . $slotStart . ':00';
+
+                $isOccupied = $space->reservations
+                    ->contains(function ($reservation) use ($fullStart) {
+
+                        return Carbon::parse(
+                            $reservation->start_time
+                        )->format('Y-m-d H:i:s')
+                            === $fullStart;
+                    });
+
+                $isBlocked = $space->blockedSlots
+                    ->contains(function ($blocked) use ($date, $slotStart) {
+
+                        return Carbon::parse(
+                            $blocked->start_time
+                        )->format('Y-m-d')
+                            === $date
+                            &&
+                            Carbon::parse(
+                                $blocked->start_time
+                            )->format('H:i')
+                            === $slotStart;
+                    });
+
+                $isPast = Carbon::parse(
+                    $fullStart
+                )->isPast();
+
+                if (
+                    !$isOccupied &&
+                    !$isBlocked &&
+                    !$isPast
+                ) {
                     $availableSlots[] = [
-                        'start' => $slotStart->format('H:i'),
-                        'end' => $slotEnd->format('H:i'),
-                        'datetime' => $slotStart->toDateTimeString()
+                        'start' => $slotStart,
+                        'end' => $slotEnd,
+                        'datetime' => $fullStart
                     ];
                 }
-                $start->addMinutes($slotDuration);
+
+                $start->addHour();
             }
         }
-        
-        return Inertia::render('Public/Spaces/Show', [
-            'space' => $space,
-            'selectedDate' => $dateString,
-            'availableSlots' => $availableSlots
-        ]);
+
+        return Inertia::render(
+            'Public/Spaces/Show',
+            [
+                'space' => $space,
+                'selectedDate' => $date,
+                'availableSlots' => $availableSlots
+            ]
+        );
     }
 }

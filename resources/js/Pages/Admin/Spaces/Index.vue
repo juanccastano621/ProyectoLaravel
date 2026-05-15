@@ -7,66 +7,153 @@ const props = defineProps({
     spaces: Array,
 });
 
-// Variables para controlar el modal
 const showingModal = ref(false);
 const isEditing = ref(false);
-const currentSpaceId = ref(null);
+const currentSpaceSlug = ref(null);
 
-// Formulario de Inertia preparado para subir archivos
+const days = [
+    { label: 'Lunes', value: 1 },
+    { label: 'Martes', value: 2 },
+    { label: 'Miércoles', value: 3 },
+    { label: 'Jueves', value: 4 },
+    { label: 'Viernes', value: 5 },
+    { label: 'Sábado', value: 6 },
+    { label: 'Domingo', value: 7 },
+];
+
+const defaultAvailabilities = () =>
+    days.map(day => ({
+        day_of_week: day.value,
+        enabled: day.value <= 5,
+        start_time: '08:00',
+        end_time: '18:00',
+    }));
+
 const form = useForm({
     name: '',
     description: '',
     capacity: '',
+    type: 'Auditorio',
+    price_per_hour: '',
+    is_active: true,
     image: null,
-    _method: 'post', // Laravel necesita esto para subir archivos al editar
+    availabilities: defaultAvailabilities(),
+    _method: 'post',
 });
 
-// Abrir modal para CREAR
 const openModalCreate = () => {
     isEditing.value = false;
+
     form.reset();
+
+    form.type = 'Auditorio';
+    form.price_per_hour = '';
+    form.is_active = true;
+    form.availabilities = defaultAvailabilities();
+
     form.clearErrors();
     form._method = 'post';
+
     showingModal.value = true;
 };
 
-// Abrir modal para EDITAR
 const openModalEdit = (space) => {
     isEditing.value = true;
-    currentSpaceId.value = space.id;
+
+    currentSpaceSlug.value = space.slug;
+
     form.name = space.name;
     form.description = space.description;
     form.capacity = space.capacity;
-    form.image = null; // No cargamos la imagen anterior por seguridad
-    form._method = 'put'; // Truco de Laravel para actualizar con archivos
+    form.type = space.type;
+    form.price_per_hour = space.price_per_hour;
+    form.is_active = space.is_active;
+    form.image = null;
+
+    form.availabilities = days.map(day => {
+        const existing = space.availabilities?.find(
+            a => a.day_of_week === day.value
+        );
+
+        return {
+            day_of_week: day.value,
+            enabled: !!existing,
+            start_time: existing?.start_time?.substring(0, 5) ?? '08:00',
+            end_time: existing?.end_time?.substring(0, 5) ?? '18:00',
+        };
+    });
+
+    form._method = 'put';
+
     form.clearErrors();
+
     showingModal.value = true;
 };
 
-// Cerrar modal
 const closeModal = () => {
     showingModal.value = false;
     form.reset();
 };
 
-// Guardar o Actualizar
 const submit = () => {
+
+    console.log('DATOS ENVIADOS');
+    console.log(form.data());
+
     if (isEditing.value) {
-        form.post(route('admin.spaces.update', currentSpaceId.value), {
+
+        form.post(route('admin.spaces.update', currentSpaceSlug.value), {
             preserveScroll: true,
-            onSuccess: () => closeModal(),
+            forceFormData: true,
+
+            onStart: () => {
+                console.log('INICIANDO REQUEST');
+            },
+
+            onSuccess: () => {
+                console.log('SUCCESS');
+                closeModal();
+            },
+
+            onError: (errors) => {
+                console.log('ERROR');
+                console.log(errors);
+            },
+
+            onFinish: () => {
+                console.log('FINISH');
+            }
         });
+
     } else {
+
         form.post(route('admin.spaces.store'), {
             preserveScroll: true,
-            onSuccess: () => closeModal(),
+            forceFormData: true,
+
+            onStart: () => {
+                console.log('INICIANDO REQUEST');
+            },
+
+            onSuccess: () => {
+                console.log('SUCCESS');
+                closeModal();
+            },
+
+            onError: (errors) => {
+                console.log('ERROR');
+                console.log(errors);
+            },
+
+            onFinish: () => {
+                console.log('FINISH');
+            }
         });
     }
 };
 
-// Eliminar
 const deleteSpace = (id) => {
-    if (confirm('¿Estás seguro de que deseas eliminar este espacio? Esta acción no se puede deshacer.')) {
+    if (confirm('¿Seguro que deseas eliminar este espacio?')) {
         router.delete(route('admin.spaces.destroy', id), {
             preserveScroll: true,
         });
@@ -80,10 +167,14 @@ const deleteSpace = (id) => {
     <AppLayout title="Espacios">
         <template #header>
             <div class="flex justify-between items-center">
-                <h2 class="font-bold text-2xl text-gray-800 leading-tight">
+                <h2 class="font-bold text-2xl text-gray-800">
                     🏛️ Gestión de Espacios
                 </h2>
-                <button @click="openModalCreate" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded shadow">
+
+                <button
+                    @click="openModalCreate"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow"
+                >
                     + Nuevo Espacio
                 </button>
             </div>
@@ -91,39 +182,102 @@ const deleteSpace = (id) => {
 
         <div class="py-10">
             <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-                
-                <div class="bg-white overflow-hidden shadow-xl sm:rounded-lg">
+                <div class="bg-white overflow-hidden shadow-xl rounded-xl">
                     <div class="overflow-x-auto">
                         <table class="min-w-full divide-y divide-gray-200">
                             <thead class="bg-gray-50">
                                 <tr>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Imagen</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nombre</th>
-                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Capacidad</th>
-                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Imagen
+                                    </th>
+
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Nombre
+                                    </th>
+
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Tipo
+                                    </th>
+
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Capacidad
+                                    </th>
+
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                                        Precio
+                                    </th>
+
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                                        Acciones
+                                    </th>
                                 </tr>
                             </thead>
+
                             <tbody class="bg-white divide-y divide-gray-200">
-                                <tr v-for="space in spaces" :key="space.id">
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <img v-if="space.image_path" :src="`/storage/${space.image_path}`" alt="Foto" class="h-12 w-16 object-cover rounded">
-                                        <div v-else class="h-12 w-16 bg-gray-200 rounded flex items-center justify-center text-xs text-gray-500">Sin foto</div>
+                                <tr
+                                    v-for="space in spaces"
+                                    :key="space.id"
+                                >
+                                    <td class="px-6 py-4">
+                                        <img
+                                            v-if="space.image_path"
+                                            :src="`/storage/${space.image_path}`"
+                                            class="h-14 w-20 rounded-lg object-cover"
+                                        >
+
+                                        <div
+                                            v-else
+                                            class="h-14 w-20 rounded-lg bg-gray-200 flex items-center justify-center text-xs text-gray-500"
+                                        >
+                                            Sin foto
+                                        </div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap">
-                                        <div class="text-sm font-medium text-gray-900">{{ space.name }}</div>
-                                        <div class="text-sm text-gray-500 truncate w-48">{{ space.description }}</div>
+
+                                    <td class="px-6 py-4">
+                                        <p class="font-semibold text-gray-900">
+                                            {{ space.name }}
+                                        </p>
+
+                                        <p class="text-sm text-gray-500 truncate w-56">
+                                            {{ space.description }}
+                                        </p>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+
+                                    <td class="px-6 py-4 text-sm text-gray-600">
+                                        {{ space.type }}
+                                    </td>
+
+                                    <td class="px-6 py-4 text-sm text-gray-600">
                                         {{ space.capacity }} personas
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                        <button @click="openModalEdit(space)" class="text-indigo-600 hover:text-indigo-900 mx-2">Editar</button>
-                                        <button @click="deleteSpace(space.id)" class="text-red-600 hover:text-red-900">Eliminar</button>
+
+                                    <td class="px-6 py-4 text-sm text-gray-600">
+                                        ${{ space.price_per_hour }}
+                                    </td>
+
+                                    <td class="px-6 py-4 text-right">
+                                        <button
+                                            @click="openModalEdit(space)"
+                                            class="text-indigo-600 hover:text-indigo-900 mr-4"
+                                        >
+                                            Editar
+                                        </button>
+
+                                        <button
+                                            @click="deleteSpace(space.id)"
+                                            class="text-red-600 hover:text-red-900"
+                                        >
+                                            Eliminar
+                                        </button>
                                     </td>
                                 </tr>
+
                                 <tr v-if="spaces.length === 0">
-                                    <td colspan="4" class="px-6 py-8 text-center text-gray-500">
-                                        No hay espacios registrados. Haz clic en "Nuevo Espacio" para comenzar.
+                                    <td
+                                        colspan="6"
+                                        class="text-center py-8 text-gray-500"
+                                    >
+                                        No hay espacios registrados
                                     </td>
                                 </tr>
                             </tbody>
@@ -133,51 +287,142 @@ const deleteSpace = (id) => {
             </div>
         </div>
 
-        <div v-if="showingModal" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-            <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-                <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeModal"></div>
+        <div
+            v-if="showingModal"
+            class="fixed inset-0 z-50 overflow-y-auto"
+        >
+            <div class="flex items-center justify-center min-h-screen p-4">
+                <div
+                    class="fixed inset-0 bg-black/40"
+                    @click="closeModal"
+                ></div>
 
-                <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-
-                <div class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
+                <div class="relative bg-white rounded-2xl shadow-2xl w-full max-w-3xl p-8">
                     <form @submit.prevent="submit">
-                        <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                            <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="modal-title">
-                                {{ isEditing ? 'Editar Espacio' : 'Registrar Nuevo Espacio' }}
-                            </h3>
-                            
-                            <div class="space-y-4">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Nombre del Auditorio</label>
-                                    <input v-model="form.name" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
-                                    <p v-if="form.errors.name" class="mt-2 text-sm text-red-600">{{ form.errors.name }}</p>
-                                </div>
+                        <h3 class="text-2xl font-bold text-gray-900 mb-6">
+                            {{ isEditing ? 'Editar Espacio' : 'Nuevo Espacio' }}
+                        </h3>
 
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Capacidad (Personas)</label>
-                                    <input v-model="form.capacity" type="number" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required>
-                                    <p v-if="form.errors.capacity" class="mt-2 text-sm text-red-600">{{ form.errors.capacity }}</p>
-                                </div>
+                        <div class="space-y-5">
+                            <input
+                                v-model="form.name"
+                                type="text"
+                                placeholder="Nombre del espacio"
+                                class="w-full rounded-lg border-gray-300"
+                                required
+                            >
 
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Descripción / Detalles</label>
-                                    <textarea v-model="form.description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" required></textarea>
-                                    <p v-if="form.errors.description" class="mt-2 text-sm text-red-600">{{ form.errors.description }}</p>
-                                </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <select
+                                    v-model="form.type"
+                                    class="rounded-lg border-gray-300"
+                                >
+                                    <option>Auditorio</option>
+                                    <option>Sala de Conferencias</option>
+                                    <option>Laboratorio</option>
+                                    <option>Cancha</option>
+                                    <option>Estudio de Grabación</option>
+                                </select>
 
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700">Fotografía (JPG, PNG)</label>
-                                    <input type="file" @input="form.image = $event.target.files[0]" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept="image/*">
-                                    <p v-if="form.errors.image" class="mt-2 text-sm text-red-600">{{ form.errors.image }}</p>
+                                <input
+                                    v-model="form.capacity"
+                                    type="number"
+                                    placeholder="Capacidad"
+                                    class="rounded-lg border-gray-300"
+                                >
+                            </div>
+
+                            <input
+                                v-model="form.price_per_hour"
+                                type="number"
+                                placeholder="Precio por hora"
+                                class="rounded-lg border-gray-300"
+                            >
+
+                            <textarea
+                                v-model="form.description"
+                                rows="3"
+                                placeholder="Descripción"
+                                class="rounded-lg border-gray-300"
+                            ></textarea>
+
+                            <div>
+                                <h4 class="font-bold mb-4">
+                                    Horarios Disponibles
+                                </h4>
+
+                                <div class="space-y-3 max-h-64 overflow-y-auto border rounded-xl p-4">
+                                    <div
+                                        v-for="day in form.availabilities"
+                                        :key="day.day_of_week"
+                                        class="border rounded-lg p-3"
+                                    >
+                                        <div class="flex justify-between items-center">
+                                            <label class="flex items-center gap-2">
+                                                <input
+                                                    v-model="day.enabled"
+                                                    type="checkbox"
+                                                >
+
+                                                <span>
+                                                    {{
+                                                        days.find(
+                                                            d => d.value === day.day_of_week
+                                                        )?.label
+                                                    }}
+                                                </span>
+                                            </label>
+                                        </div>
+
+                                        <div
+                                            v-if="day.enabled"
+                                            class="grid grid-cols-2 gap-3 mt-3"
+                                        >
+                                            <input
+                                                v-model="day.start_time"
+                                                type="time"
+                                                class="rounded-lg border-gray-300"
+                                            >
+
+                                            <input
+                                                v-model="day.end_time"
+                                                type="time"
+                                                class="rounded-lg border-gray-300"
+                                            >
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
+
+                            <label class="flex items-center gap-3">
+                                <input
+                                    v-model="form.is_active"
+                                    type="checkbox"
+                                >
+
+                                <span>Espacio activo</span>
+                            </label>
+
+                            <input
+                                type="file"
+                                @input="form.image = $event.target.files[0]"
+                            >
                         </div>
-                        <div class="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                            <button type="submit" :disabled="form.processing" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-indigo-600 text-base font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50">
-                                Guardar
-                            </button>
-                            <button type="button" @click="closeModal" class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">
+
+                        <div class="flex justify-end gap-3 mt-8">
+                            <button
+                                type="button"
+                                @click="closeModal"
+                                class="px-5 py-2 border rounded-lg"
+                            >
                                 Cancelar
+                            </button>
+
+                            <button
+                                type="submit"
+                                class="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg"
+                            >
+                                Guardar
                             </button>
                         </div>
                     </form>
